@@ -1,0 +1,2165 @@
+<!DOCTYPE html>
+<!DOCTYPE html>
+
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>论文自动排版工具 — 项目展示</title>
+<link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400;0,6..96,600;0,6..96,700;1,6..96,400&amp;family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&amp;display=swap" rel="stylesheet"/>
+<style>
+/* ===========================================
+   CSS CUSTOM PROPERTIES (Notebook Tabs)
+   =========================================== */
+:root {
+    --bg-outer: #2d2d2d;
+    --bg-page: #f8f6f1;
+    --text-primary: #1a1a1a;
+    --text-secondary: #555;
+    --text-muted: #908c84;
+    --tab-mint: #98d4bb;
+    --tab-lavender: #c7b8ea;
+    --tab-pink: #f4b8c5;
+    --tab-sky: #a8d8ea;
+    --tab-cream: #ffe6a7;
+    --tab-highlight: #e8a87c;
+    --card-shadow: 0 12px 48px rgba(0,0,0,0.35);
+    --ease-out-expo: cubic-bezier(0.16,1,0.3,1);
+    --duration: 0.65s;
+}
+
+/* ===========================================
+   FIXED 16:9 STAGE — viewport-base.css
+   =========================================== */
+html, body {
+    width: 100%; height: 100%;
+    margin: 0; overflow: hidden;
+    background: var(--bg-outer);
+}
+
+.deck-viewport {
+    position: fixed; inset: 0;
+    overflow: hidden;
+    background: var(--bg-outer);
+}
+
+.deck-stage {
+    position: absolute; left: 0; top: 0;
+    width: 1920px; height: 1080px;
+    overflow: hidden;
+    transform-origin: 0 0;
+    background: var(--bg-outer);
+}
+
+.slide {
+    position: absolute; inset: 0;
+    width: 1920px; height: 1080px;
+    overflow: hidden;
+    display: block;
+    visibility: hidden;
+    opacity: 0;
+    pointer-events: none;
+    background: var(--bg-outer);
+}
+
+.slide.active,
+.slide.visible {
+    visibility: visible;
+    opacity: 1;
+    pointer-events: auto;
+    z-index: 1;
+}
+
+img, video, canvas, svg {
+    max-width: 100%;
+    max-height: 100%;
+}
+
+@media print {
+    html, body { width: 1920px; height: auto; overflow: visible; background: #fff; }
+    .deck-viewport { position: static; overflow: visible; background: #fff; }
+    .deck-stage { position: static; width: auto; height: auto; transform: none !important; background: none; }
+    .slide {
+        position: relative; display: block !important;
+        visibility: visible !important; opacity: 1 !important;
+        pointer-events: auto !important; width: 1920px; height: 1080px;
+        break-after: page; page-break-after: always;
+    }
+    .slide:last-child { break-after: auto; page-break-after: auto; }
+    .deck-controls, #lightbox-overlay { display: none !important; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.2s !important;
+    }
+}
+
+/* ===========================================
+   NOTEBOOK CARD SYSTEM
+   =========================================== */
+.slide-inner {
+    width: 100%; height: 100%;
+    display: flex; align-items: center; justify-content: center;
+}
+
+.paper-card {
+    position: relative;
+    width: 1500px;
+    height: 920px;
+    background: var(--bg-page);
+    border-radius: 4px;
+    box-shadow: var(--card-shadow);
+    padding: 64px 120px 64px 100px;
+    overflow: visible;
+}
+
+/* Binder holes */
+.binder-holes {
+    position: absolute;
+    left: 50px; top: 70px; bottom: 70px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    z-index: 3;
+}
+.binder-hole {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: var(--bg-outer);
+    box-shadow: inset 0 2px 6px rgba(0,0,0,0.5), 0 1px 0 rgba(255,255,255,0.08);
+}
+
+/* Section tabs — right edge, stick out from card */
+.tab-bar {
+    position: absolute;
+    right: -36px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    z-index: 3;
+}
+.tab {
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    padding: 18px 13px;
+    border-radius: 0 8px 8px 0;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 16px;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    color: #1a1a1a;
+    box-shadow: 2px 2px 8px rgba(0,0,0,0.10);
+    transition: all var(--duration) var(--ease-out-expo);
+    opacity: 0.4;
+    filter: grayscale(0.4);
+    cursor: pointer;
+    user-select: none;
+}
+.tab:hover {
+    opacity: 0.7;
+    filter: grayscale(0.1);
+}
+.tab.active-tab {
+    opacity: 1;
+    filter: grayscale(0);
+    box-shadow: 4px 4px 16px rgba(0,0,0,0.20);
+    padding-right: 22px;  /* extends right to pop out */
+    font-weight: 600;
+}
+
+/* Card content area */
+.card-content {
+    position: relative;
+    z-index: 2;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+/* ===========================================
+   TYPOGRAPHY — all ≥ 16px
+   =========================================== */
+.deck-label {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 16px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+}
+.slide-number {
+    position: absolute;
+    top: 0; right: 0;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 16px;
+    color: var(--text-muted);
+    letter-spacing: 0.04em;
+}
+.card-title {
+    font-family: 'Bodoni Moda', serif;
+    font-size: 56px;
+    font-weight: 700;
+    line-height: 1.12;
+    color: var(--text-primary);
+    letter-spacing: -0.01em;
+    margin-bottom: 20px;
+}
+.card-title.small {
+    font-size: 44px;
+}
+.card-subtitle {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 22px;
+    font-weight: 400;
+    line-height: 1.55;
+    color: var(--text-secondary);
+}
+.body-text {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 18px;
+    font-weight: 400;
+    line-height: 1.6;
+    color: var(--text-secondary);
+}
+.body-text strong {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+/* ===========================================
+   LAYOUT HELPERS
+   =========================================== */
+.two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 44px;
+    flex: 1;
+    align-items: start;
+}
+.two-col-wide {
+    display: grid;
+    grid-template-columns: 1.1fr 0.9fr;
+    gap: 48px;
+    flex: 1;
+    align-items: center;
+}
+.three-col {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+    flex: 1;
+}
+
+/* ===========================================
+   COMPONENTS
+   =========================================== */
+.stat-grid {
+    display: flex;
+    gap: 36px;
+    flex-wrap: wrap;
+}
+.stat-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.stat-num {
+    font-family: 'Bodoni Moda', serif;
+    font-size: 44px;
+    font-weight: 700;
+    line-height: 1;
+    color: var(--text-primary);
+}
+.stat-label {
+    font-size: 16px;
+}
+
+/* Process step */
+.process-card {
+    background: #fff;
+    border-radius: 8px;
+    padding: 20px 22px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.process-num {
+    font-family: 'Bodoni Moda', serif;
+    font-size: 34px;
+    font-weight: 700;
+    color: var(--text-muted);
+    line-height: 1;
+}
+.process-title {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-primary);
+    line-height: 1.3;
+}
+.process-desc {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 16px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+}
+.process-img {
+    width: 100%;
+    height: 110px;
+    object-fit: cover;
+    border-radius: 4px;
+    border: 1px solid rgba(0,0,0,0.08);
+    cursor: pointer;
+}
+
+/* Feature list */
+.feature-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: 0;
+    margin: 0;
+}
+.feature-list li {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 17px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    padding-left: 18px;
+    position: relative;
+}
+.feature-list li::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 9px;
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--tab-mint);
+}
+
+/* Capability card */
+.capability-card {
+    background: #fff;
+    border-radius: 8px;
+    padding: 20px 24px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+    border-left: 4px solid var(--tab-sky);
+}
+.capability-card h4 {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0 0 8px 0;
+}
+.capability-card p {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 16px;
+    color: var(--text-secondary);
+    line-height: 1.55;
+}
+
+/* Version card */
+.version-card {
+    background: #fff;
+    border-radius: 8px;
+    padding: 22px 26px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+}
+.version-card h4 {
+    font-family: 'Bodoni Moda', serif;
+    font-size: 30px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0 0 4px 0;
+}
+.version-tag {
+    display: inline-block;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    padding: 4px 12px;
+    border-radius: 100px;
+    margin-bottom: 8px;
+}
+.tag-green { background: #d4f0e0; color: #1a6b3c; }
+.tag-blue { background: #d4e4f0; color: #1a4b6b; }
+.tag-purple { background: #e8dcf4; color: #4a2a6b; }
+
+/* Quote block */
+.quote-block {
+    border-left: 3px solid var(--tab-mint);
+    padding: 10px 18px;
+    margin: 12px 0;
+    background: rgba(152,212,187,0.12);
+    border-radius: 0 6px 6px 0;
+}
+.quote-block p {
+    font-family: 'Bodoni Moda', serif;
+    font-style: italic;
+    font-size: 20px;
+    color: var(--text-primary);
+    line-height: 1.45;
+}
+
+/* Problem card */
+.problem-card {
+    background: #fff;
+    border-radius: 8px;
+    padding: 20px 24px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+    margin-bottom: 10px;
+}
+.problem-card h4 {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0 0 4px 0;
+}
+
+/* Section divider */
+.section-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+}
+.section-head .dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+.dot-mint { background: var(--tab-mint); }
+.dot-lavender { background: var(--tab-lavender); }
+.dot-pink { background: var(--tab-pink); }
+.dot-sky { background: var(--tab-sky); }
+.dot-cream { background: var(--tab-cream); }
+
+/* Tags row */
+.tag-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.mini-tag {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 16px;
+    padding: 5px 14px;
+    border-radius: 100px;
+    background: rgba(0,0,0,0.05);
+    color: var(--text-secondary);
+}
+
+/* Image styles */
+.slide-img {
+    border-radius: 6px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+    object-fit: cover;
+    width: 100%;
+    cursor: pointer;
+}
+.slide-img-large {
+    border-radius: 6px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+    object-fit: contain;
+    width: 100%;
+    max-height: 380px;
+    cursor: pointer;
+}
+.compare-img {
+    border-radius: 4px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.10);
+    width: 100%;
+    object-fit: cover;
+    height: 140px;
+    cursor: pointer;
+}
+.compare-label {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 16px;
+    color: var(--text-muted);
+    margin-top: 4px;
+    text-align: center;
+}
+
+/* Version image */
+.version-img {
+    border-radius: 4px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.10);
+    width: 100%;
+    object-fit: cover;
+    height: 170px;
+    cursor: pointer;
+}
+
+/* Image caption */
+.img-caption {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 16px;
+    color: var(--text-muted);
+    margin-top: 6px;
+    text-align: center;
+}
+
+/* Video embed */
+.video-wrap {
+    border-radius: 6px;
+    overflow: hidden;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+}
+.video-wrap video {
+    width: 100%;
+    display: block;
+}
+
+/* Flow arrow */
+.flow-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin: 10px 0;
+}
+.flow-step {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+    background: #fff;
+    padding: 8px 16px;
+    border-radius: 6px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+}
+.flow-arrow {
+    color: var(--text-muted);
+    font-size: 18px;
+}
+
+/* ===========================================
+   LIGHTBOX (image click-to-enlarge)
+   =========================================== */
+#lightbox-overlay {
+    display: none;
+    position: fixed; inset: 0;
+    z-index: 20000;
+    background: rgba(0,0,0,0.88);
+    cursor: pointer;
+    align-items: center; justify-content: center;
+}
+#lightbox-overlay.show {
+    display: flex;
+}
+#lightbox-overlay img {
+    max-width: 90vw;
+    max-height: 90vh;
+    object-fit: contain;
+    border-radius: 4px;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+}
+#lightbox-close {
+    position: fixed;
+    top: 16px; right: 20px;
+    z-index: 20001;
+    background: rgba(0,0,0,0.5);
+    color: #fff;
+    border: none;
+    border-radius: 50%;
+    width: 40px; height: 40px;
+    font-size: 24px;
+    cursor: pointer;
+    display: none;
+    align-items: center; justify-content: center;
+}
+#lightbox-overlay.show ~ #lightbox-close { display: flex; }
+
+/* ===========================================
+   ANIMATIONS
+   =========================================== */
+.reveal {
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity var(--duration) var(--ease-out-expo),
+                transform var(--duration) var(--ease-out-expo);
+}
+.slide.visible .reveal { opacity: 1; transform: translateY(0); }
+.reveal:nth-child(1) { transition-delay: 0.06s; }
+.reveal:nth-child(2) { transition-delay: 0.14s; }
+.reveal:nth-child(3) { transition-delay: 0.22s; }
+.reveal:nth-child(4) { transition-delay: 0.30s; }
+.reveal:nth-child(5) { transition-delay: 0.38s; }
+.reveal:nth-child(6) { transition-delay: 0.46s; }
+.reveal:nth-child(7) { transition-delay: 0.54s; }
+.reveal:nth-child(8) { transition-delay: 0.62s; }
+
+
+
+/* ===========================================
+   INLINE EDITING
+   =========================================== */
+.edit-hotzone {
+    position: fixed; top: 0; left: 0;
+    width: 80px; height: 80px;
+    z-index: 10000;
+    cursor: pointer;
+}
+.edit-toggle {
+    position: fixed;
+    top: 12px; left: 12px;
+    opacity: 0.55;
+    pointer-events: auto;
+    transition: opacity 0.3s ease;
+    z-index: 10001;
+    background: rgba(0,0,0,0.5);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 14px;
+    font-size: 16px;
+    cursor: pointer;
+    font-family: 'DM Sans', sans-serif;
+    backdrop-filter: blur(4px);
+}
+.edit-toggle:hover { opacity: 1; background: rgba(0,0,0,0.7); }
+.edit-toggle.active { opacity: 1; background: rgba(0,0,0,0.75); }
+
+/* ===========================================
+   CONTROLS
+   =========================================== */
+.deck-controls {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    background: rgba(0,0,0,0.55);
+    padding: 10px 22px;
+    border-radius: 100px;
+    backdrop-filter: blur(10px);
+    position: fixed;
+    left: 50%;
+    bottom: 22px;
+    transform: translateX(-50%);
+    z-index: 1000;
+}
+.control-btn {
+    background: none; border: none;
+    color: rgba(255,255,255,0.7);
+    font-size: 18px;
+    cursor: pointer;
+    padding: 4px 10px;
+    transition: color 0.2s;
+}
+.control-btn:hover { color: #fff; }
+.page-indicator {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 16px;
+    color: rgba(255,255,255,0.6);
+    min-width: 60px;
+    text-align: center;
+}
+
+
+/* ===========================================
+   DESKTOP TYPE & LAYOUT — presentation scale
+   Designed for common 1366–1920px desktop screens.
+   =========================================== */
+@media (min-width: 901px) {
+    .paper-card {
+        width: 1540px;
+        height: 960px;
+        padding: 36px 104px 36px 92px;
+    }
+
+    .binder-holes {
+        left: 44px;
+        top: 52px;
+        bottom: 52px;
+    }
+
+    .tab {
+        font-size: 18px;
+        padding: 17px 13px;
+    }
+
+    .deck-label,
+    .slide-number {
+        font-size: 18px;
+    }
+
+    .card-title {
+        margin-top: 0;
+        font-size: 68px;
+        line-height: 1.08;
+        margin-bottom: 18px;
+    }
+
+    .card-title.small {
+        font-size: 54px;
+        line-height: 1.12;
+    }
+
+    .card-subtitle {
+        font-size: 27px;
+        line-height: 1.48;
+    }
+
+    .card-subtitle,
+    .body-text,
+    .process-desc,
+    .capability-card p,
+    .version-card p,
+    .quote-block p,
+    .img-caption,
+    .compare-label {
+        margin-top: 0;
+    }
+
+    .body-text {
+        font-size: 23px;
+        line-height: 1.45;
+    }
+
+    .two-col {
+        grid-template-columns: 1fr 1fr;
+        gap: 34px;
+    }
+
+    .two-col-wide {
+        grid-template-columns: 1.06fr 0.94fr;
+        gap: 42px;
+    }
+
+    .three-col {
+        gap: 14px;
+    }
+
+    .stat-grid {
+        gap: 26px;
+    }
+
+    .stat-num {
+        font-size: 50px;
+    }
+
+    .stat-label {
+        font-size: 20px;
+        line-height: 1.32;
+    }
+
+    .process-card {
+        padding: 15px 17px;
+        gap: 6px;
+    }
+
+    .process-num {
+        font-size: 38px;
+    }
+
+    .process-title {
+        font-size: 23px;
+        margin: 0;
+    }
+
+    .process-desc {
+        font-size: 23px;
+        line-height: 1.30;
+        margin: 0;
+    }
+
+    .process-img {
+        height: 88px;
+        margin-top: 2px;
+    }
+
+    .feature-list {
+        gap: 3px;
+    }
+
+    .feature-list li {
+        font-size: 23px;
+        line-height: 1.30;
+        padding-left: 17px;
+    }
+
+    .feature-list li::before {
+        top: 10px;
+    }
+
+    .capability-card {
+        padding: 15px 19px;
+    }
+
+    .capability-card h4 {
+        font-size: 23px;
+        margin-bottom: 5px;
+    }
+
+    .capability-card p {
+        font-size: 23px;
+        line-height: 1.32;
+        margin: 0;
+    }
+
+    .version-card {
+        padding: 18px 22px;
+    }
+
+    .version-card h4 {
+        font-size: 32px;
+    }
+
+    .version-tag {
+        font-size: 18px;
+        padding: 4px 12px;
+    }
+
+    .quote-block {
+        padding: 9px 17px;
+        margin: 10px 0;
+    }
+
+    .quote-block p {
+        font-size: 22px;
+        line-height: 1.42;
+        margin: 0;
+    }
+
+    .problem-card {
+        padding: 17px 21px;
+        margin-bottom: 9px;
+    }
+
+    .problem-card h4 {
+        font-size: 22px;
+        margin-bottom: 4px;
+    }
+
+    .section-head {
+        margin-bottom: 13px;
+    }
+
+    .mini-tag {
+        font-size: 20px;
+        padding: 5px 11px;
+    }
+
+    .compare-label,
+    .img-caption {
+        font-size: 20px;
+    }
+
+    .flow-row {
+        gap: 5px;
+        margin: 8px 0;
+    }
+
+    .flow-step {
+        font-size: 18px;
+        padding: 8px 13px;
+    }
+
+    .flow-arrow {
+        font-size: 20px;
+    }
+
+    .control-btn {
+        font-size: 21px;
+    }
+
+    .page-indicator,
+    .edit-toggle {
+        font-size: 18px;
+    }
+
+    /* Inline typography from the original file. */
+    .card-content h4[style*="font-size:18px"],
+    .card-content p[style*="font-size:18px"] {
+        font-size: 23px !important;
+    }
+
+    .card-content strong[style*="font-size:17px"] {
+        font-size: 20px !important;
+    }
+
+    .version-card h4[style*="font-size:22px"] {
+        font-size: 26px !important;
+    }
+
+    .slide:last-of-type .card-title[style*="font-size:56px"] {
+        font-size: 68px !important;
+    }
+
+    /* Dense slides receive slightly more purposeful column ratios. */
+    .slide:nth-of-type(3) .process-card,
+    .slide:nth-of-type(4) .process-card {
+        padding-top: 12px;
+        padding-bottom: 12px;
+    }
+
+    .slide:nth-of-type(3) .three-col,
+    .slide:nth-of-type(4) .three-col {
+        flex: 0 0 auto;
+    }
+
+    .slide:nth-of-type(3) .process-img {
+        height: 210px;
+    }
+
+    .slide:nth-of-type(4) .process-img {
+        height: 220px;
+    }
+
+    .slide:nth-of-type(4) .card-content {
+        justify-content: center;
+    }
+
+    .slide:nth-of-type(3) .flow-row {
+        margin-bottom: 5px !important;
+    }
+
+    .slide:nth-of-type(4) .quote-block {
+        margin-top: 8px !important;
+        padding-top: 7px;
+        padding-bottom: 7px;
+    }
+
+    .slide:nth-of-type(2) .card-title,
+    .slide:nth-of-type(3) .card-title {
+        font-size: 64px;
+        margin-bottom: 12px;
+    }
+
+    .slide:nth-of-type(6) .card-title.small {
+        font-size: 51px;
+        margin-bottom: 12px !important;
+    }
+
+    .slide:nth-of-type(5) .two-col,
+    .slide:nth-of-type(9) .two-col {
+        grid-template-columns: 1.08fr 0.92fr;
+    }
+
+    .slide:nth-of-type(5) .two-col {
+        align-items: start;
+        margin-top: 24px;
+    }
+
+    .slide:nth-of-type(9) .two-col {
+        align-items: center;
+    }
+
+    .slide:nth-of-type(6) .two-col,
+    .slide:nth-of-type(8) .two-col {
+        grid-template-columns: 1.04fr 0.96fr;
+    }
+
+    .slide:nth-of-type(6) .two-col {
+        align-items: start;
+    }
+
+    .slide:nth-of-type(8) .two-col {
+        align-items: center;
+    }
+
+    .slide:nth-of-type(7) .two-col {
+        align-items: start;
+    }
+
+    .slide:nth-of-type(7) .version-img {
+        height: 210px;
+    }
+
+    .slide:nth-of-type(5) .compare-img {
+        height: 170px !important;
+    }
+
+    .slide:nth-of-type(8) .slide-img-large {
+        max-height: 520px;
+    }
+
+    .slide:nth-of-type(9) .video-wrap video {
+        max-height: 300px !important;
+    }
+}
+
+/* ===========================================
+   MOBILE / QR VIEW — portrait responsive layout
+   Keeps desktop 16:9 deck, switches phones to a
+   readable vertical document without stage scaling.
+   =========================================== */
+@media (max-width: 900px) {
+    html, body {
+        width: 100%;
+        height: auto;
+        min-height: 100%;
+        overflow-x: hidden;
+        overflow-y: auto;
+        background: var(--bg-page);
+        -webkit-text-size-adjust: 100%;
+        text-size-adjust: 100%;
+    }
+
+    .deck-viewport {
+        position: relative;
+        inset: auto;
+        width: 100%;
+        min-height: 100%;
+        overflow: visible;
+        background: var(--bg-page);
+    }
+
+    .deck-stage {
+        position: relative;
+        left: auto;
+        top: auto;
+        width: 100%;
+        height: auto;
+        overflow: visible;
+        transform: none !important;
+        background: var(--bg-page);
+    }
+
+    /* Mobile reads as one continuous case-study page. */
+    .slide,
+    .slide.active,
+    .slide.visible {
+        position: relative;
+        inset: auto;
+        display: block;
+        visibility: visible;
+        opacity: 1;
+        pointer-events: auto;
+        width: 100%;
+        height: auto;
+        min-height: 0;
+        overflow: visible;
+        background: var(--bg-page);
+        border-bottom: 1px solid rgba(0,0,0,0.08);
+    }
+
+    .slide:first-child {
+        min-height: 100dvh;
+    }
+
+    .slide-inner {
+        display: block;
+        width: 100%;
+        height: auto;
+        padding: 10px;
+        box-sizing: border-box;
+    }
+
+    .paper-card {
+        width: 100%;
+        height: auto;
+        min-height: 0;
+        padding: 28px 20px 34px;
+        box-sizing: border-box;
+        border-radius: 12px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.10);
+        overflow: hidden;
+    }
+
+    .slide:first-child .paper-card {
+        min-height: calc(100dvh - 20px);
+        display: flex;
+        align-items: flex-start;
+    }
+
+    .slide:first-child .card-content {
+        width: 100%;
+    }
+
+    .binder-holes,
+    .tab-bar,
+    .deck-controls,
+    .edit-hotzone,
+    .edit-toggle {
+        display: none !important;
+    }
+
+    .card-content {
+        height: auto;
+        min-height: 0;
+    }
+
+    .slide-number {
+        position: static;
+        display: block;
+        margin-bottom: 14px;
+        text-align: right;
+        font-size: 16px;
+    }
+
+    /* All main layout systems collapse to one readable column. */
+    .two-col,
+    .two-col-wide,
+    .three-col {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 20px;
+        width: 100%;
+        align-items: start;
+    }
+
+    .card-content [style*="grid-template-columns:1fr 1fr"],
+    .card-content [style*="grid-template-columns: 1fr 1fr"] {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    /* Minimum readable type size: 16 CSS px. */
+    .deck-label,
+    .stat-label,
+    .process-desc,
+    .feature-list li,
+    .capability-card p,
+    .version-tag,
+    .compare-label,
+    .img-caption,
+    .mini-tag,
+    .flow-step,
+    .page-indicator,
+    .slide-number {
+        font-size: 16px;
+    }
+
+    .body-text,
+    .process-title,
+    .capability-card h4,
+    .problem-card h4,
+    .card-subtitle {
+        font-size: 17px;
+    }
+
+    .card-title,
+    .card-title.small {
+        font-size: clamp(34px, 10vw, 46px);
+        line-height: 1.15;
+        margin-bottom: 16px;
+        overflow-wrap: anywhere;
+    }
+
+    .slide:first-child .card-title {
+        margin-top: 2px;
+        font-size: clamp(38px, 11vw, 48px);
+    }
+
+    .card-subtitle {
+        line-height: 1.65;
+    }
+
+    /* Data cards wrap into a stable two-column grid. */
+    .stat-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 18px 14px;
+        width: 100%;
+    }
+
+    .stat-item {
+        min-width: 0;
+        padding: 14px;
+        border-radius: 8px;
+        background: rgba(255,255,255,0.72);
+        box-shadow: 0 1px 6px rgba(0,0,0,0.06);
+    }
+
+    .stat-num {
+        font-size: clamp(34px, 10vw, 42px);
+        overflow-wrap: anywhere;
+    }
+
+    /* Horizontal process becomes a vertical flow. */
+    .flow-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 8px;
+        margin: 16px 0 20px;
+    }
+
+    .flow-step {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 12px 16px;
+        text-align: center;
+    }
+
+    .flow-arrow {
+        justify-self: center;
+        transform: rotate(90deg);
+        font-size: 22px;
+        line-height: 1;
+    }
+
+    .process-card,
+    .capability-card,
+    .version-card,
+    .problem-card {
+        padding: 18px;
+    }
+
+    .process-img,
+    .slide-img,
+    .slide-img-large,
+    .compare-img,
+    .version-img {
+        display: block;
+        width: 100%;
+        height: auto !important;
+        max-height: none !important;
+        object-fit: contain;
+        background: #fff;
+        cursor: zoom-in;
+    }
+
+    .process-img {
+        aspect-ratio: 16 / 9;
+    }
+
+    .slide:first-child .slide-img-large {
+        max-height: 46dvh !important;
+    }
+
+    .img-caption,
+    .compare-label {
+        margin-top: 8px;
+        line-height: 1.45;
+    }
+
+    .tag-row {
+        gap: 8px;
+    }
+
+    .mini-tag {
+        padding: 7px 12px;
+        line-height: 1.35;
+    }
+
+    .quote-block {
+        margin: 14px 0;
+        padding: 14px 16px;
+    }
+
+    .quote-block p,
+    .quote-block p[style] {
+        font-size: 18px !important;
+        line-height: 1.55;
+    }
+
+    .video-wrap {
+        width: 100%;
+        border-radius: 8px;
+        background: #000;
+    }
+
+    .video-wrap video {
+        display: block;
+        width: 100%;
+        height: auto;
+        max-height: none !important;
+        aspect-ratio: 16 / 9;
+        object-fit: contain;
+        background: #000;
+    }
+
+    #lightbox-overlay {
+        padding: 12px;
+        box-sizing: border-box;
+        touch-action: pinch-zoom;
+    }
+
+    #lightbox-overlay img {
+        max-width: 96vw;
+        max-height: 88dvh;
+        cursor: zoom-out;
+    }
+
+    #lightbox-close {
+        top: max(12px, env(safe-area-inset-top));
+        right: 12px;
+        width: 44px;
+        height: 44px;
+        font-size: 24px;
+    }
+
+    /* Reveal immediately in a scrolling document; avoids blank blocks. */
+    .reveal,
+    .slide.visible .reveal {
+        opacity: 1;
+        transform: none;
+        transition: none;
+    }
+}
+
+@media (max-width: 380px) {
+    .paper-card {
+        padding-left: 16px;
+        padding-right: 16px;
+    }
+
+    .stat-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+</style>
+</head>
+<body>
+<!-- === LIGHTBOX === -->
+<div id="lightbox-overlay"></div>
+<button id="lightbox-close" title="关闭">✕</button>
+<!-- === EDIT MODE === -->
+<div class="edit-hotzone"></div>
+<button class="edit-toggle" id="editToggle" title="按 E 键切换编辑模式">✏️ 编辑</button>
+<div class="deck-viewport">
+<main class="deck-stage" id="deckStage">
+<!-- ==========================================
+     SLIDE 1: 项目概览
+     =========================================== -->
+<section class="slide active" data-section="项目概览">
+<div class="slide-inner">
+<div class="paper-card">
+<div class="binder-holes">
+<div class="binder-hole"></div><div class="binder-hole"></div><div class="binder-hole"></div>
+</div>
+<div class="tab-bar">
+<div class="tab active-tab" style="background:var(--tab-mint);">项目概览</div>
+<div class="tab" style="background:var(--tab-lavender);">用户问题</div>
+<div class="tab" style="background:var(--tab-pink);">产品方案</div>
+<div class="tab" style="background:var(--tab-sky);">核心能力</div>
+<div class="tab" style="background:var(--tab-cream);">我的贡献</div>
+</div>
+<div class="card-content">
+<span class="slide-number reveal">01 / 10</span>
+<div class="two-col-wide">
+<div>
+<span class="deck-label reveal">Project Showcase</span>
+<h1 class="card-title reveal">论文自动排版工具</h1>
+<p class="card-subtitle reveal">面向使用 Word 撰写毕业论文的高校学生，将分散的学院格式规范转化为可配置规则，自动完成封面、目录、标题、正文、页眉页码等核心模块排版。</p>
+<div class="stat-grid reveal" style="margin-top:28px;">
+<div class="stat-item">
+<span class="stat-num">7天</span>
+<span class="stat-label">首轮产品开发</span>
+</div>
+<div class="stat-item">
+<span class="stat-num">3</span>
+<span class="stat-label">版本持续迭代</span>
+</div>
+<div class="stat-item">
+<span class="stat-num">5</span>
+<span class="stat-label">用户真实体验</span>
+</div>
+<div class="stat-item">
+<span class="stat-num">~5min</span>
+<span class="stat-label">单次处理时间</span>
+</div>
+</div>
+</div>
+<div class="reveal">
+<img alt="产品主界面" class="slide-img-large" src="1.产品主界面截图/项目概览.png" style="max-height:440px;"/>
+<p class="img-caption">▲ 产品主界面截图（点击放大）</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- ==========================================
+     SLIDE 2: 用户问题
+     =========================================== -->
+<section class="slide" data-section="用户问题">
+<div class="slide-inner">
+<div class="paper-card">
+<div class="binder-holes">
+<div class="binder-hole"></div><div class="binder-hole"></div><div class="binder-hole"></div>
+</div>
+<div class="tab-bar">
+<div class="tab" style="background:var(--tab-mint);">项目概览</div>
+<div class="tab active-tab" style="background:var(--tab-lavender);">用户问题</div>
+<div class="tab" style="background:var(--tab-pink);">产品方案</div>
+<div class="tab" style="background:var(--tab-sky);">核心能力</div>
+<div class="tab" style="background:var(--tab-cream);">我的贡献</div>
+</div>
+<div class="card-content">
+<span class="slide-number reveal">02 / 10</span>
+<div class="section-head reveal"><span class="dot dot-lavender"></span><span class="deck-label" style="margin:0;">用户问题</span></div>
+<h2 class="card-title reveal">毕业论文写完后，排版<br/>仍然是一项高成本任务</h2>
+<div class="two-col" style="margin-top:8px;">
+<div class="reveal">
+<h4 style="font-family:'DM Sans',sans-serif;font-size:18px;font-weight:600;color:var(--text-primary);margin:0 0 10px 0;">用户原有方案的不足</h4>
+<div class="problem-card">
+<h4>⏱ 手动使用 Word 排版 — 耗时费力</h4>
+<ul class="feature-list">
+<li>全文逐段检查和修改格式</li>
+<li>修改内容后需重新确认格式</li>
+<li>页眉、页码、分节操作门槛高</li>
+<li>格式规范分散，容易遗漏</li>
+</ul>
+</div>
+<div class="problem-card">
+<h4>🔧 使用 LaTeX 模板 — 工具不适配</h4>
+<ul class="feature-list">
+<li>本学院无官方 LaTeX 模板</li>
+<li>毕业论文以 Word 文档提交</li>
+<li>现有工具难以适配学院实际要求</li>
+</ul>
+</div>
+</div>
+<div class="reveal">
+<div class="capability-card" style="border-left-color:var(--tab-lavender);margin-bottom:16px;">
+<h4>目标用户</h4>
+<ul class="feature-list">
+<li>正在完成毕业论文的高校学生</li>
+<li>使用 Word 撰写和提交论文的用户</li>
+<li>对复杂页眉页码和章节格式不熟悉的用户</li>
+<li>希望减少重复排版和检查时间的用户</li>
+</ul>
+</div>
+
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- ==========================================
+     SLIDE 3: 产品方案（上）— 流程 1-3
+     =========================================== -->
+<section class="slide" data-section="产品方案">
+<div class="slide-inner">
+<div class="paper-card">
+<div class="binder-holes">
+<div class="binder-hole"></div><div class="binder-hole"></div><div class="binder-hole"></div>
+</div>
+<div class="tab-bar">
+<div class="tab" style="background:var(--tab-mint);">项目概览</div>
+<div class="tab" style="background:var(--tab-lavender);">用户问题</div>
+<div class="tab active-tab" style="background:var(--tab-pink);">产品方案</div>
+<div class="tab" style="background:var(--tab-sky);">核心能力</div>
+<div class="tab" style="background:var(--tab-cream);">我的贡献</div>
+</div>
+<div class="card-content">
+<span class="slide-number reveal">03 / 10</span>
+<div class="section-head reveal"><span class="dot dot-pink"></span><span class="deck-label" style="margin:0;">产品方案</span></div>
+<h2 class="card-title reveal" style="margin-bottom:12px;">将分散规范转化为<br/>一套可执行的排版流程</h2>
+<div class="flow-row reveal" style="margin-bottom:14px;">
+<span class="flow-step">导入论文</span><span class="flow-arrow">→</span>
+<span class="flow-step">确认结构</span><span class="flow-arrow">→</span>
+<span class="flow-step">填写封面</span><span class="flow-arrow">→</span>
+<span class="flow-step">调整配置</span><span class="flow-arrow">→</span>
+<span class="flow-step">安全检查</span><span class="flow-arrow">→</span>
+<span class="flow-step">生成并核查</span>
+</div>
+<div class="three-col reveal">
+<div class="process-card">
+<span class="process-num">01</span>
+<h4 class="process-title">导入论文</h4>
+<p class="process-desc">选择待排版的 Word 文档，工具读取文档内容与结构。</p>
+<img alt="导入文档" class="process-img" src="2.六步使用流程截图/1.导入文档.png"/>
+</div>
+<div class="process-card">
+<span class="process-num">02</span>
+<h4 class="process-title">确认结构</h4>
+<p class="process-desc">识别章节结构，用户确认或修正疑似标题段落。</p>
+<img alt="结构确认" class="process-img" src="2.六步使用流程截图/2.结构确认.png"/>
+</div>
+<div class="process-card">
+<span class="process-num">03</span>
+<h4 class="process-title">填写封面信息</h4>
+<p class="process-desc">填写姓名、学号、专业、导师等，写入标准封面模板。</p>
+<img alt="封面信息" class="process-img" src="2.六步使用流程截图/3.封面信息.png"/>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- ==========================================
+     SLIDE 4: 产品方案（下）— 流程 4-6
+     =========================================== -->
+<section class="slide" data-section="产品方案">
+<div class="slide-inner">
+<div class="paper-card">
+<div class="binder-holes">
+<div class="binder-hole"></div><div class="binder-hole"></div><div class="binder-hole"></div>
+</div>
+<div class="tab-bar">
+<div class="tab" style="background:var(--tab-mint);">项目概览</div>
+<div class="tab" style="background:var(--tab-lavender);">用户问题</div>
+<div class="tab active-tab" style="background:var(--tab-pink);">产品方案</div>
+<div class="tab" style="background:var(--tab-sky);">核心能力</div>
+<div class="tab" style="background:var(--tab-cream);">我的贡献</div>
+</div>
+<div class="card-content">
+<span class="slide-number reveal">04 / 10</span>
+<div class="three-col reveal">
+<div class="process-card">
+<span class="process-num">04</span>
+<h4 class="process-title">调整排版配置</h4>
+<p class="process-desc">默认使用学院规范，支持修改并保存为 YAML 配置文件。</p>
+<img alt="排版配置" class="process-img" src="2.六步使用流程截图/4.排版配置.png"/>
+</div>
+<div class="process-card">
+<span class="process-num">05</span>
+<h4 class="process-title">执行安全检查</h4>
+<p class="process-desc">检查必要章节、标题数量、重复章节和配置合法性。</p>
+<img alt="安全检查" class="process-img" src="2.六步使用流程截图/5.安全检查.png"/>
+</div>
+<div class="process-card">
+<span class="process-num">06</span>
+<h4 class="process-title">生成并检查结果</h4>
+<p class="process-desc">输出排版 Word、可选 PDF、HTML 报告、修改与审计记录。</p>
+<img alt="输出生成" class="process-img" src="2.六步使用流程截图/6.输出生成.png"/>
+</div>
+</div>
+<div class="quote-block reveal" style="margin-top:20px;">
+<p>"导入论文 → 确认结构 → 填写封面 → 调整配置 → 安全检查 → 生成并核查结果"</p>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- ==========================================
+     SLIDE 5: 核心产品能力
+     =========================================== -->
+<section class="slide" data-section="核心能力">
+<div class="slide-inner">
+<div class="paper-card">
+<div class="binder-holes">
+<div class="binder-hole"></div><div class="binder-hole"></div><div class="binder-hole"></div>
+</div>
+<div class="tab-bar">
+<div class="tab" style="background:var(--tab-mint);">项目概览</div>
+<div class="tab" style="background:var(--tab-lavender);">用户问题</div>
+<div class="tab" style="background:var(--tab-pink);">产品方案</div>
+<div class="tab active-tab" style="background:var(--tab-sky);">核心能力</div>
+<div class="tab" style="background:var(--tab-cream);">我的贡献</div>
+</div>
+<div class="card-content">
+<span class="slide-number reveal">05 / 10</span>
+<div class="section-head reveal"><span class="dot dot-sky"></span><span class="deck-label" style="margin:0;">核心能力</span></div>
+<div class="two-col">
+<div class="reveal">
+<div class="capability-card" style="border-left-color:var(--tab-mint);margin-bottom:14px;">
+<h4>📄 自动排版 — 已支持模块</h4>
+<div class="tag-row">
+<span class="mini-tag">封面</span><span class="mini-tag">页边距</span>
+<span class="mini-tag">中英文摘要</span><span class="mini-tag">标题/正文样式</span>
+<span class="mini-tag">行距缩进</span><span class="mini-tag">目录</span>
+<span class="mini-tag">页眉页脚</span><span class="mini-tag">页码格式</span>
+<span class="mini-tag">参考文献</span><span class="mini-tag">致谢</span>
+<span class="mini-tag">原创性声明</span><span class="mini-tag">研究成果</span>
+</div>
+</div>
+<div class="capability-card" style="border-left-color:var(--tab-lavender);margin-bottom:14px;">
+<h4>⚙ 可配置规则</h4>
+<p>页面大小、页边距、页眉页脚距离、页码样式/起始值/字体、正文字体/字号/缩进/行距、三级标题样式等。<strong>配置保存为 YAML</strong>，便于复用和版本管理。</p>
+</div>
+<div class="capability-card" style="border-left-color:var(--tab-pink);">
+<h4>🔒 本地隐私保护</h4>
+<p>论文仅在本地读取处理，不上传服务器；源文件只读不覆盖；结果输出到新文件和任务目录。</p>
+</div>
+</div>
+<div class="reveal">
+<p style="font-family:'DM Sans',sans-serif;font-size:18px;font-weight:600;color:var(--text-primary);margin:0 0 8px 0;">排版前后对比</p>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+<div><img alt="排版前" class="compare-img" src="3.排版前后对比/排版前-正文.png" style="height:130px;"/><span class="compare-label">排版前：正文</span></div>
+<div><img alt="排版后" class="compare-img" src="3.排版前后对比/排版后-正文与目录.png" style="height:130px;"/><span class="compare-label">排版后：正文与目录</span></div>
+</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+<div><img alt="排版前" class="compare-img" src="3.排版前后对比/排版前-参考文献.png" style="height:130px;"/><span class="compare-label">排版前：参考文献</span></div>
+<div><img alt="排版后" class="compare-img" src="3.排版前后对比/排版后-参考文献.png" style="height:130px;"/><span class="compare-label">排版后：参考文献</span></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- ==========================================
+     SLIDE 6: 我的贡献
+     =========================================== -->
+<section class="slide" data-section="我的贡献">
+<div class="slide-inner">
+<div class="paper-card">
+<div class="binder-holes">
+<div class="binder-hole"></div><div class="binder-hole"></div><div class="binder-hole"></div>
+</div>
+<div class="tab-bar">
+<div class="tab" style="background:var(--tab-mint);">项目概览</div>
+<div class="tab" style="background:var(--tab-lavender);">用户问题</div>
+<div class="tab" style="background:var(--tab-pink);">产品方案</div>
+<div class="tab" style="background:var(--tab-sky);">核心能力</div>
+<div class="tab active-tab" style="background:var(--tab-cream);">我的贡献</div>
+</div>
+<div class="card-content">
+<span class="slide-number reveal">06 / 10</span>
+<div class="section-head reveal"><span class="dot dot-cream"></span><span class="deck-label" style="margin:0;">我的贡献</span></div>
+<h2 class="card-title small reveal" style="margin-bottom:16px;">从用户问题到可使用产品，<br/>独立完成完整项目流程</h2>
+<div class="two-col">
+<div class="reveal">
+<div class="capability-card" style="border-left-color:var(--tab-cream);margin-bottom:12px;">
+<h4>产品工作</h4>
+<ul class="feature-list">
+<li>从自身和同学排版经历中识别用户问题</li>
+<li>确定目标用户、产品形式和核心使用场景</li>
+<li>设计完整用户操作流程，确定功能和版本优先级</li>
+<li>设计 GUI 信息架构、三栏布局及视觉方向</li>
+<li>将学院模板和格式规范拆分为结构化产品规则</li>
+</ul>
+</div>
+<div class="capability-card" style="border-left-color:var(--tab-sky);margin-bottom:12px;">
+<h4>项目推进</h4>
+<ul class="feature-list">
+<li>独立完成三个版本规划和迭代</li>
+<li>将复杂排版任务拆分为封面、页面、标题等模块</li>
+<li>建立测试文档和人工校准样本</li>
+<li>使用真实论文进行测试和回归验证</li>
+</ul>
+</div>
+</div>
+<div class="reveal">
+<div class="capability-card" style="border-left-color:var(--tab-mint);margin-bottom:12px;">
+<h4>质量与可信度设计</h4>
+<ul class="feature-list">
+<li>输出 HTML 检查报告 + 完整日志</li>
+<li>源文件只读不覆盖</li>
+<li>JSON 修改记录 + 文本完整性检查</li>
+<li>阻断/警告/提示分级 + 任务快照</li>
+</ul>
+</div>
+
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- ==========================================
+     SLIDE 7: 版本迭代 V1 + V2
+     =========================================== -->
+<section class="slide" data-section="版本迭代">
+<div class="slide-inner">
+<div class="paper-card">
+<div class="binder-holes">
+<div class="binder-hole"></div><div class="binder-hole"></div><div class="binder-hole"></div>
+</div>
+<div class="tab-bar">
+<div class="tab active-tab" style="background:var(--tab-mint);">版本迭代</div>
+<div class="tab" style="background:var(--tab-lavender);">项目结果</div>
+<div class="tab" style="background:var(--tab-pink);">结尾</div>
+</div>
+<div class="card-content">
+<span class="slide-number reveal">07 / 10</span>
+<div class="section-head reveal"><span class="dot dot-mint"></span><span class="deck-label" style="margin:0;">版本迭代</span></div>
+<h2 class="card-title small reveal" style="margin-bottom:12px;">三个版本的产品演进</h2>
+<div class="two-col">
+<div class="reveal">
+<div class="version-card" style="border-top:3px solid var(--tab-mint);margin-bottom:10px;">
+<span class="version-tag tag-green">V1 · 固定模板版本</span>
+<h4>验证可行性</h4>
+<p class="body-text" style="margin-bottom:6px;">验证"按学院规范自动生成可编辑 Word 毕业论文"的产品价值和技术可行性。</p>
+<p class="body-text" style="margin-bottom:6px;"><strong>主要功能：</strong>封面、摘要、正文、标题、参考文献、声明和研究成果等模块基础排版。</p>
+<p class="body-text"><strong>暴露问题：</strong>格式值写死在程序中，模板更新需修改代码，无法保存不同配置。</p>
+</div>
+<img alt="V1版本" class="version-img" src="4.迭代/V1.png" style="margin-top:8px;"/><p class="img-caption">▲ V1 固定模板版本（点击放大图片）</p>
+</div>
+<div class="reveal">
+<div class="version-card" style="border-top:3px solid var(--tab-sky);margin-bottom:10px;">
+<span class="version-tag tag-blue">V2 · 配置驱动版本</span>
+<h4>适应变化</h4>
+<p class="body-text" style="margin-bottom:6px;">将格式规则从程序逻辑中拆分，提高对不同模板和规则变化的适应能力。</p>
+<p class="body-text" style="margin-bottom:6px;"><strong>核心调整：</strong>YAML 配置、桌面界面改格式、多配置版本保存、模块化配置。</p>
+<p class="body-text"><strong>暴露问题：</strong>配置项增加后页面信息密集、按钮过多、导航层级不清。</p>
+</div>
+<img alt="V2版本" class="version-img" src="4.迭代/V2.png" style="margin-top:8px;"/><p class="img-caption">▲ V2 配置驱动版本（点击放大图片）</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- ==========================================
+     SLIDE 8: 版本迭代 V3
+     =========================================== -->
+<section class="slide" data-section="版本迭代">
+<div class="slide-inner">
+<div class="paper-card">
+<div class="binder-holes">
+<div class="binder-hole"></div><div class="binder-hole"></div><div class="binder-hole"></div>
+</div>
+<div class="tab-bar">
+<div class="tab active-tab" style="background:var(--tab-mint);">版本迭代</div>
+<div class="tab" style="background:var(--tab-lavender);">项目结果</div>
+<div class="tab" style="background:var(--tab-pink);">结尾</div>
+</div>
+<div class="card-content">
+<span class="slide-number reveal">08 / 10</span>
+<div class="two-col">
+<div class="reveal">
+<div class="version-card" style="border-top:3px solid var(--tab-lavender);margin-bottom:14px;">
+<span class="version-tag tag-purple">V3 · 任务流程式界面</span>
+<h4>易于使用</h4>
+<p class="body-text">将以功能模块为中心的界面，调整为以用户任务为中心的分步操作流程。</p>
+</div>
+<div class="capability-card" style="border-left-color:var(--tab-lavender);margin-bottom:10px;">
+<h4>V3 主要调整</h4>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+<div>
+<strong style="font-family:'DM Sans',sans-serif;font-size:17px;color:var(--text-primary);">原问题</strong>
+<ul class="feature-list" style="margin-top:4px;">
+<li>顶部页签和模块同时存在</li>
+<li>页面展示过多字段</li>
+<li>主/辅操作缺少区分</li>
+<li>日志占据较大空间</li>
+</ul>
+</div>
+<div>
+<strong style="font-family:'DM Sans',sans-serif;font-size:17px;color:var(--text-primary);">解决方案</strong>
+<ul class="feature-list" style="margin-top:4px;">
+<li>左侧完整步骤导航</li>
+<li>中央仅处理当前任务</li>
+<li>右侧检查状态+辅助信息</li>
+<li>卡片化内容+较大留白</li>
+</ul>
+</div>
+</div>
+</div>
+<div class="quote-block" style="margin-bottom:6px;">
+<p>"体验用户反馈新版工具'步骤清晰'。"</p>
+</div>
+<div class="quote-block" style="border-left-color:var(--tab-cream);background:rgba(255,230,167,0.15);">
+<p style="font-size:18px;">V1 解决"能不能做" → V2 解决"能否适配变化" → V3 解决"用户是否容易使用"</p>
+</div>
+</div>
+<div class="reveal">
+<img alt="V3版本" class="slide-img-large" src="4.迭代/V3.png" style="max-height:520px;"/>
+<p class="img-caption">▲ V3 任务流程式界面（点击放大）</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- ==========================================
+     SLIDE 9: 项目结果
+     =========================================== -->
+<section class="slide" data-section="项目结果">
+<div class="slide-inner">
+<div class="paper-card">
+<div class="binder-holes">
+<div class="binder-hole"></div><div class="binder-hole"></div><div class="binder-hole"></div>
+</div>
+<div class="tab-bar">
+<div class="tab" style="background:var(--tab-mint);">版本迭代</div>
+<div class="tab active-tab" style="background:var(--tab-lavender);">项目结果</div>
+<div class="tab" style="background:var(--tab-pink);">结尾</div>
+</div>
+<div class="card-content">
+<span class="slide-number reveal">09 / 10</span>
+<div class="section-head reveal"><span class="dot dot-lavender"></span><span class="deck-label" style="margin:0;">项目结果</span></div>
+<div class="two-col">
+<div class="reveal">
+<h2 class="card-title small" style="margin-bottom:14px;">当前测试结果</h2>
+<p class="body-text" style="margin-bottom:14px;">使用 3 份 8–9 页论文样本 + 1 份 42 页长文档测试，每份样本均配有人工校准版本用于逐项对比。</p>
+<div class="stat-grid" style="margin-bottom:18px;">
+<div class="stat-item">
+<span class="stat-num">~5min</span>
+<span class="stat-label">单次自动排版</span>
+</div>
+<div class="stat-item">
+<span class="stat-num">~30min</span>
+<span class="stat-label">人工排版参考</span>
+</div>
+<div class="stat-item">
+<span class="stat-num" style="color:#1a6b3c;">0</span>
+<span class="stat-label">文件损坏/内容丢失</span>
+</div>
+</div>
+<div class="capability-card" style="border-left-color:var(--tab-mint);">
+<h4>已稳定处理的模块（12项）</h4>
+<div class="tag-row">
+<span class="mini-tag">封面</span><span class="mini-tag">页面布局</span><span class="mini-tag">中英文摘要</span>
+<span class="mini-tag">目录</span><span class="mini-tag">页眉页码</span><span class="mini-tag">标题</span>
+<span class="mini-tag">正文</span><span class="mini-tag">参考文献</span><span class="mini-tag">致谢</span>
+<span class="mini-tag">原创声明</span><span class="mini-tag">研究成果</span>
+</div>
+</div>
+</div>
+<div class="reveal">
+<p style="font-family:'DM Sans',sans-serif;font-size:18px;font-weight:600;color:var(--text-primary);margin:0 0 8px 0;">操作演示</p>
+<div class="video-wrap" style="margin-bottom:10px;">
+<video aria-label="论文自动排版工具操作演示" controls="" loop="" muted="" playsinline="" preload="metadata" src="演示视频加速.mp4" style="width:100%;max-height:240px;"></video>
+</div>
+<p class="img-caption" style="margin-bottom:12px;">▲ 工具操作演示（加速播放）</p>
+<div class="version-card" style="border-top:3px solid var(--tab-highlight);">
+<h4 style="font-size:22px;">仍需人工调整</h4>
+<ul class="feature-list">
+<li>封面标题斜体</li>
+<li>正文引用与参考文献引用格式</li>
+<li>个别未被识别的标题</li>
+</ul>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- ==========================================
+     SLIDE 10: 结尾
+     =========================================== -->
+<section class="slide" data-section="结尾">
+<div class="slide-inner">
+<div class="paper-card">
+<div class="binder-holes">
+<div class="binder-hole"></div><div class="binder-hole"></div><div class="binder-hole"></div>
+</div>
+<div class="tab-bar">
+<div class="tab" style="background:var(--tab-mint);">版本迭代</div>
+<div class="tab" style="background:var(--tab-lavender);">项目结果</div>
+<div class="tab active-tab" style="background:var(--tab-pink);">结尾</div>
+</div>
+<div class="card-content" style="justify-content:center;align-items:center;text-align:center;">
+<span class="slide-number reveal">10 / 10</span>
+<div class="reveal" style="display:flex;flex-direction:column;align-items:center;gap:20px;max-width:800px;">
+<span class="deck-label">Closing</span>
+<h2 class="card-title" style="font-size:56px;">从个人痛点出发，<br/>完成一次完整的产品验证</h2>
+</div>
+<p class="body-text" style="max-width:600px;">项目目前处于小规模验证阶段，已完成从固定模板原型到可配置、本地化、可审计桌面工具的演进。</p>
+<div class="stat-grid" style="justify-content:center;margin-top:8px;">
+<div class="stat-item" style="align-items:center;">
+<span class="stat-num">7天</span>
+<span class="stat-label">首轮开发</span>
+</div>
+<div class="stat-item" style="align-items:center;">
+<span class="stat-num">3</span>
+<span class="stat-label">版本迭代</span>
+</div>
+<div class="stat-item" style="align-items:center;">
+<span class="stat-num">5</span>
+<span class="stat-label">真实用户</span>
+</div>
+<div class="stat-item" style="align-items:center;">
+<span class="stat-num">100%</span>
+<span class="stat-label">本地隐私保护</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+</main>
+</div>
+<!-- === CONTROLS === -->
+<div class="deck-controls">
+<button class="control-btn" id="prevBtn" title="上一页">◀</button>
+<span class="page-indicator" id="pageInd">1 / 10</span>
+<button class="control-btn" id="nextBtn" title="下一页">▶</button>
+</div>
+<script>
+/* ===========================================
+   SLIDE PRESENTATION CONTROLLER
+   =========================================== */
+class SlidePresentation {
+    constructor() {
+        this.slides = document.querySelectorAll('.slide');
+        this.currentSlide = 0;
+        this.stage = document.getElementById('deckStage');
+        this.totalSlides = this.slides.length;
+
+        this.setupStageScale();
+        this.setupKeyboardNav();
+        this.setupTouchNav();
+        this.setupControls();
+        this.setupTabClicks();
+        this.showSlide(0);
+    }
+
+    setupStageScale() {
+        const scale = () => {
+            const factor = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
+            const x = (window.innerWidth - 1920 * factor) / 2;
+            const y = (window.innerHeight - 1080 * factor) / 2;
+            this.stage.style.transform = `translate(${x}px, ${y}px) scale(${factor})`;
+        };
+        scale();
+        window.addEventListener('resize', scale);
+    }
+
+    setupKeyboardNav() {
+        document.addEventListener('keydown', (e) => {
+            if (e.target.getAttribute('contenteditable')) return;
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+            switch(e.key) {
+                case 'ArrowRight': case 'ArrowDown': case ' ':
+                    e.preventDefault();
+                    this.nextSlide();
+                    break;
+                case 'ArrowLeft': case 'ArrowUp':
+                    e.preventDefault();
+                    this.prevSlide();
+                    break;
+                case 'Home':
+                    e.preventDefault();
+                    this.showSlide(0);
+                    break;
+                case 'End':
+                    e.preventDefault();
+                    this.showSlide(this.totalSlides - 1);
+                    break;
+            }
+        });
+    }
+
+    setupTouchNav() {
+        let touchStartX = 0, touchStartY = 0;
+        document.addEventListener('touchstart', (e) => {
+            touchStartX = e.touches[0].clientX;
+            touchStartY = e.touches[0].clientY;
+        }, { passive: true });
+        document.addEventListener('touchend', (e) => {
+            const dx = e.changedTouches[0].clientX - touchStartX;
+            const dy = e.changedTouches[0].clientY - touchStartY;
+            if (Math.abs(dx) > Math.abs(dy)) {
+                if (dx > 50) this.prevSlide();
+                else if (dx < -50) this.nextSlide();
+            }
+        });
+    }
+
+    setupControls() {
+        document.getElementById('prevBtn').addEventListener('click', () => this.prevSlide());
+        document.getElementById('nextBtn').addEventListener('click', () => this.nextSlide());
+        document.addEventListener('wheel', (e) => {
+            if (e.target.closest('.paper-card') && e.target.closest('.paper-card').scrollHeight > e.target.closest('.paper-card').clientHeight) return;
+            if (e.deltaY > 0) this.nextSlide();
+            else if (e.deltaY < 0) this.prevSlide();
+        }, { passive: true });
+    }
+
+    /* Tab click → navigate to first slide of that section */
+    setupTabClicks() {
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const section = tab.textContent.trim();
+                for (let i = 0; i < this.slides.length; i++) {
+                    if (this.slides[i].dataset.section === section) {
+                        this.showSlide(i);
+                        return;
+                    }
+                }
+            });
+        });
+    }
+
+    showSlide(index) {
+        this.currentSlide = Math.max(0, Math.min(index, this.totalSlides - 1));
+        const currentSection = this.slides[this.currentSlide].dataset.section;
+
+        this.slides.forEach((slide, i) => {
+            const isActive = i === this.currentSlide;
+            slide.classList.toggle('active', isActive);
+            slide.classList.toggle('visible', isActive);
+
+            /* Highlight tabs matching this slide's section */
+            const tabs = slide.querySelectorAll('.tab');
+            tabs.forEach(t => {
+                const match = t.textContent.trim() === currentSection;
+                t.classList.toggle('active-tab', match);
+            });
+        });
+
+        document.getElementById('pageInd').textContent = `${this.currentSlide + 1} / ${this.totalSlides}`;
+    }
+
+    nextSlide() {
+        if (this.currentSlide < this.totalSlides - 1) this.showSlide(this.currentSlide + 1);
+    }
+    prevSlide() {
+        if (this.currentSlide > 0) this.showSlide(this.currentSlide - 1);
+    }
+}
+
+/* ===========================================
+   IMAGE LIGHTBOX
+   =========================================== */
+class ImageLightbox {
+    constructor() {
+        this.overlay = document.getElementById('lightbox-overlay');
+        this.closeBtn = document.getElementById('lightbox-close');
+        this.setupImageClicks();
+        this.setupClose();
+    }
+
+    setupImageClicks() {
+        document.addEventListener('click', (e) => {
+            const img = e.target.closest('img');
+            if (!img) return;
+            // Don't trigger lightbox in edit mode
+            if (img.closest('[contenteditable="true"]')) return;
+            this.open(img.src, img.alt);
+        });
+    }
+
+    setupClose() {
+        const close = () => this.overlay.classList.remove('show');
+        this.overlay.addEventListener('click', close);
+        this.closeBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            close();
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && this.overlay.classList.contains('show')) {
+                close();
+            }
+        });
+    }
+
+    open(src, alt) {
+        this.overlay.innerHTML = `<img src="${src}" alt="${alt}">`;
+        this.overlay.classList.add('show');
+    }
+}
+
+/* ===========================================
+   RESPONSIVE VIDEO PLAYBACK
+   On phones, muted video plays only while visible.
+   Controls remain available for explicit playback.
+   =========================================== */
+class ResponsiveVideoController {
+    constructor() {
+        this.videos = Array.from(document.querySelectorAll('video'));
+        this.media = window.matchMedia('(max-width: 900px)');
+        this.observer = null;
+        this.prepareVideos();
+        this.applyMode();
+
+        const onChange = () => this.applyMode();
+        if (this.media.addEventListener) this.media.addEventListener('change', onChange);
+        else this.media.addListener(onChange);
+    }
+
+    prepareVideos() {
+        this.videos.forEach(video => {
+            video.muted = true;
+            video.defaultMuted = true;
+            video.playsInline = true;
+            video.setAttribute('muted', '');
+            video.setAttribute('playsinline', '');
+        });
+    }
+
+    applyMode() {
+        if (this.observer) {
+            this.observer.disconnect();
+            this.observer = null;
+        }
+
+        this.videos.forEach(video => video.pause());
+        if (!this.media.matches || !('IntersectionObserver' in window)) return;
+
+        this.observer = new IntersectionObserver(entries => {
+            entries.forEach(entry => {
+                const video = entry.target;
+                if (entry.isIntersecting && entry.intersectionRatio >= 0.55) {
+                    video.play().catch(() => {
+                        /* Browser policy may require the user to press play. */
+                    });
+                } else {
+                    video.pause();
+                }
+            });
+        }, { threshold: [0, 0.55, 1] });
+
+        this.videos.forEach(video => this.observer.observe(video));
+    }
+}
+
+/* ===========================================
+   INLINE EDITING
+   =========================================== */
+class InlineEditor {
+    constructor() {
+        this.isActive = false;
+        this.setupToggle();
+        this.setupKeyboard();
+        this.setupSave();
+    }
+
+    setupToggle() {
+        const toggle = document.getElementById('editToggle');
+        toggle.addEventListener('click', () => this.toggleEditMode());
+    }
+
+    setupKeyboard() {
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'e' || e.key === 'E') {
+                if (!e.target.getAttribute('contenteditable') && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
+                    this.toggleEditMode();
+                }
+            }
+        });
+    }
+
+    setupSave() {
+        document.addEventListener('keydown', (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+                if (this.isActive) {
+                    e.preventDefault();
+                    this.saveToLocalStorage();
+                }
+            }
+        });
+    }
+
+    toggleEditMode() {
+        this.isActive = !this.isActive;
+        const toggle = document.getElementById('editToggle');
+        toggle.textContent = this.isActive ? '💾 保存' : '✏️ 编辑';
+        toggle.classList.toggle('active', this.isActive);
+
+        document.querySelectorAll('.slide h1, .slide h2, .slide h3, .slide h4, .slide p, .slide li, .slide span.deck-label, .flow-step').forEach(el => {
+            el.contentEditable = this.isActive;
+        });
+
+        if (!this.isActive) this.saveToLocalStorage();
+    }
+
+    saveToLocalStorage() {
+        const slides = document.querySelectorAll('.slide');
+        const data = [];
+        slides.forEach((slide) => {
+            const texts = [];
+            slide.querySelectorAll('[contenteditable]').forEach(el => texts.push(el.innerHTML));
+            data.push(texts);
+        });
+        localStorage.setItem('presentation-edits', JSON.stringify(data));
+    }
+}
+
+/* ===========================================
+   INIT
+   =========================================== */
+const presentation = new SlidePresentation();
+const lightbox = new ImageLightbox();
+const videoController = new ResponsiveVideoController();
+const editor = new InlineEditor();
+</script>
+<script crossorigin="anonymous" data-cf-beacon='{"version":"2024.11.0","token":"7939e04a4baf43c8b86a560f74aac60e","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' defer="" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496"></script>
+<script crossorigin="anonymous" data-cf-beacon='{"version":"2024.11.0","token":"bf63f9c0f02d4920a8cb2ff2c7e6a46a","r":1,"server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' defer="" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496"></script>
+<script crossorigin="anonymous" data-cf-beacon='{"version":"2024.11.0","token":"4c38b9d5fea24014af64d41ff4d13eb2","r":1,"server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' defer="" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496"></script>
+<script defer src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"7939e04a4baf43c8b86a560f74aac60e","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
+<script defer src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"bf63f9c0f02d4920a8cb2ff2c7e6a46a","r":1,"server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
+<script defer src="https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496" integrity="sha512-ZE9pZaUXND66v380QUtch/5sE9tPFh2zg45pR2PB0CVkCtOREv2AJKkSidISWkysEuQ0EH8faUU5du78bx87UQ==" data-cf-beacon='{"version":"2024.11.0","token":"4c38b9d5fea24014af64d41ff4d13eb2","r":1,"server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
+</body>
+</html>
